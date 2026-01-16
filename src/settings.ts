@@ -44,8 +44,8 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	openRouterApiKey: "",
 	openRouterModel: "openai/gpt-5-mini",
 	openRouterReferer: "",
-	openRouterAppTitle: "Tuon Live Transcribe (Obsidian)",
-	showWidget: true,
+	openRouterAppTitle: "Tuon Scribe",
+	showWidget: false,
 	autoScrollTranscript: true,
 	autoSwitchToTranscript: true,
 	assemblyAiSampleRate: 16000,
@@ -53,8 +53,8 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	assemblyAiEncoding: "pcm_s16le",
 	assemblyAiFormatTurns: true,
 	assemblyAiEndOfTurnConfidenceThreshold: 0.4,
-	assemblyAiMinEndOfTurnSilenceMs: 400,
-	assemblyAiMaxTurnSilenceMs: 1280,
+	assemblyAiMinEndOfTurnSilenceMs: 250,
+	assemblyAiMaxTurnSilenceMs: 400,
 	summarySystemPrompt: buildSystemPrompt("summary"),
 	prettifySystemPrompt: buildSystemPrompt("prettify"),
 };
@@ -168,19 +168,6 @@ export class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.openRouterReferer)
 					.onChange(async (value) => {
 						this.plugin.settings.openRouterReferer = value.trim();
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("OpenRouter app title (optional)")
-			.setDesc("If set, sent as X-Title header for attribution.")
-			.addText((text) =>
-				text
-					.setPlaceholder("My Obsidian Plugin")
-					.setValue(this.plugin.settings.openRouterAppTitle)
-					.onChange(async (value) => {
-						this.plugin.settings.openRouterAppTitle = value.trim();
 						await this.plugin.saveSettings();
 					})
 			);

@@ -113,7 +113,7 @@ export function renderVoiceSummaryBlock(opts: {
 	const visualizerCanvas = visualizerWrap.createEl("canvas", {
 		cls: "tuon-voice-block__visualizer",
 	});
-	visualizerCanvas.width = 120;
+	visualizerCanvas.width = 145;
 	visualizerCanvas.height = 24;
 	const visualizerPreview = visualizerWrap.createDiv({
 		cls: "tuon-voice-block__visualizer-preview",
@@ -317,7 +317,7 @@ export function renderVoiceSummaryBlock(opts: {
 		prettyMeta.textContent = meta;
 	}
 
-	function getLastWords(text: string, count = 5) {
+	function getLastWords(text: string, count = 4) {
 		const words = text.trim().split(/\s+/).filter(Boolean);
 		if (words.length === 0) return "";
 		return words.slice(-count).join(" ");

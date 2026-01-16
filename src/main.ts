@@ -13,6 +13,8 @@ import { openRouterChatCompletion } from "./ai/openrouter";
 import { buildSystemPrompt, buildUserPrompt, NotesAction } from "./ai/voiceSummaryPrompts";
 import { LiveTranscribeService } from "./transcribe/liveTranscribeService";
 import { AudioVisualizer } from "./ui/audioVisualizer";
+import { showSelectionOverlay } from "./ui/selectionOverlay";
+import { EditorView } from "@codemirror/view";
 import {
 	buildVoiceSummaryFence,
 	createVoiceSummaryBlockData,
@@ -24,6 +26,8 @@ import {
 	testAssemblyAiApiKey,
 	testOpenRouterApiKey,
 } from "./diagnostics/apiKeyDiagnostics";
+
+const OPENROUTER_APP_TITLE = "Tuon Scribe";
 
 // Remember to rename these classes and interfaces!
 
@@ -251,6 +255,18 @@ export default class MyPlugin extends Plugin {
 			this.widgetTranscriptEl.textContent = preview || "Say something to begin…";
 			this.scrollWidgetTranscriptToBottom();
 		}
+	}
+
+	private getEditorView(editor: Editor): EditorView | null {
+		const maybe = (editor as any)?.cm;
+		if (maybe && typeof maybe.coordsAtPos === "function") {
+			return maybe as EditorView;
+		}
+		const nested = (editor as any)?.cm?.cm;
+		if (nested && typeof nested.coordsAtPos === "function") {
+			return nested as EditorView;
+		}
+		return null;
 	}
 
 	private scrollWidgetTranscriptToBottom() {
@@ -547,13 +563,14 @@ export default class MyPlugin extends Plugin {
 			apiKey: this.settings.openRouterApiKey,
 			model: this.settings.openRouterModel,
 			referer: this.settings.openRouterReferer,
-			appTitle: this.settings.openRouterAppTitle,
+			appTitle: OPENROUTER_APP_TITLE,
 		});
 		showTestResultToast(res);
 	}
 
 	private async runNotesAction(editor: Editor, action: NotesAction) {
-		const selection = editor.getSelection()?.trim() ?? "";
+		const selectionRaw = editor.getSelection() ?? "";
+		const selection = selectionRaw.trim();
 		if (!selection) {
 			new Notice("Select some text first.");
 			return;
@@ -563,12 +580,27 @@ export default class MyPlugin extends Plugin {
 			return;
 		}
 
+		// Capture the original selection range immediately so we can replace it deterministically,
+		// even if the user clicks elsewhere while the request is in flight.
+		const fromPos = editor.getCursor("from");
+		const toPos = editor.getCursor("to");
+		const fromOffset = editor.posToOffset(fromPos);
+		const toOffset = editor.posToOffset(toPos);
+		const selectionStart = Math.min(fromOffset, toOffset);
+		const selectionEnd = Math.max(fromOffset, toOffset);
+
 		const system = this.getSystemPrompt(action);
 		const prompt = buildUserPrompt({
 			action,
 			transcription: selection,
 			// Keep timestamp out for now (optional) to avoid timezone surprises.
 		});
+
+		const view = this.getEditorView(editor);
+		const label = action === "summary" ? "Summarizing…" : "Prettifying…";
+		const hideOverlay = view
+			? showSelectionOverlay(view, selectionStart, selectionEnd, label)
+			: null;
 
 		try {
 			new Notice(action === "summary" ? "Summarizing…" : "Prettifying…");
@@ -577,7 +609,7 @@ export default class MyPlugin extends Plugin {
 					apiKey: this.settings.openRouterApiKey,
 					model: this.settings.openRouterModel,
 					referer: this.settings.openRouterReferer,
-					appTitle: this.settings.openRouterAppTitle,
+					appTitle: OPENROUTER_APP_TITLE,
 				},
 				{
 					messages: [
@@ -588,15 +620,42 @@ export default class MyPlugin extends Plugin {
 				}
 			);
 
+			const currentRange = editor.getRange(
+				editor.offsetToPos(selectionStart),
+				editor.offsetToPos(selectionEnd)
+			);
+			const rangeStillMatches = currentRange.trim() === selection;
+
 			if (action === "prettify") {
-				editor.replaceSelection(out);
+				if (rangeStillMatches) {
+					editor.replaceRange(
+						out,
+						editor.offsetToPos(selectionStart),
+						editor.offsetToPos(selectionEnd)
+					);
+				} else {
+					new Notice("Selection changed while prettifying; inserting result at cursor.");
+					editor.replaceSelection(out);
+				}
 			} else {
 				const cleaned = stripRedundantSummaryHeading(out);
-				editor.replaceSelection(`${selection}\n\n---\n\n${cleaned}\n`);
+				const replacement = `${selection}\n\n---\n\n${cleaned}\n`;
+				if (rangeStillMatches) {
+					editor.replaceRange(
+						replacement,
+						editor.offsetToPos(selectionStart),
+						editor.offsetToPos(selectionEnd)
+					);
+				} else {
+					new Notice("Selection changed while summarizing; inserting summary at cursor.");
+					editor.replaceSelection(`---\n\n${cleaned}\n`);
+				}
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			new Notice(`AI request failed: ${msg}`);
+		} finally {
+			hideOverlay?.();
 		}
 	}
 
@@ -713,7 +772,7 @@ export default class MyPlugin extends Plugin {
 				apiKey: this.settings.openRouterApiKey,
 				model: this.settings.openRouterModel,
 				referer: this.settings.openRouterReferer,
-				appTitle: this.settings.openRouterAppTitle,
+				appTitle: OPENROUTER_APP_TITLE,
 			},
 			{
 				messages: [
@@ -743,7 +802,7 @@ export default class MyPlugin extends Plugin {
 				apiKey: this.settings.openRouterApiKey,
 				model: this.settings.openRouterModel,
 				referer: this.settings.openRouterReferer,
-				appTitle: this.settings.openRouterAppTitle,
+				appTitle: OPENROUTER_APP_TITLE,
 			},
 			{
 				messages: [

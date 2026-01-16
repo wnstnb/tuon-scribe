@@ -1,6 +1,6 @@
 {
-	"id": "tuon-live-transcribe-obsidian",
-	"name": "Tuon Scribe and Summarize",
+	"id": "tuon-scribe",
+	"name": "Tuon Scribe",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Demonstrates some of the capabilities of the Obsidian API.",
