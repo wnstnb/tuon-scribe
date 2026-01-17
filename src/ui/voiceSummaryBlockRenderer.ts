@@ -86,6 +86,8 @@ export function renderVoiceSummaryBlock(opts: {
 	let recordingWasActive = false;
 	let clearConfirm = false;
 	let clearAnimating = false;
+	let copySuccess = false;
+	let copyTimer: number | null = null;
 	let isEditingTitle = false;
 	let titleBlurMode: "save" | "cancel" | null = null;
 
@@ -154,6 +156,10 @@ export function renderVoiceSummaryBlock(opts: {
 		cls: "tuon-voice-clear-button",
 	});
 	const clearIcon = clearButton.createSpan({ cls: "tuon-voice-clear-button__icon" });
+	const copyButton = tabsActions.createEl("button", {
+		cls: "tuon-voice-copy-button",
+	});
+	const copyIcon = copyButton.createSpan({ cls: "tuon-voice-copy-button__icon" });
 	const panels = container.createDiv({ cls: "tuon-voice-block__panels" });
 	const transcriptPanel = panels.createDiv({ cls: "tuon-voice-block__panel" });
 	const summaryPanel = panels.createDiv({ cls: "tuon-voice-block__panel" });
@@ -405,6 +411,13 @@ export function renderVoiceSummaryBlock(opts: {
 			setIcon(clearIcon, "eraser");
 		}
 
+		const activeText = getActiveTabText().text;
+		copyButton.disabled = isProcessing || !activeText;
+		copyButton.setAttr("aria-label", "Copy active tab");
+		copyButton.setAttr("title", "Copy active tab");
+		copyButton.toggleClass("is-success", copySuccess);
+		setIcon(copyIcon, copySuccess ? "check" : "copy");
+
 		recordButton.setAttr("aria-label", recording ? "Stop recording" : "Start recording");
 		recordButton.setAttr("title", recording ? "Stop recording" : "Start recording");
 		recordButton.textContent = "";
@@ -423,6 +436,49 @@ export function renderVoiceSummaryBlock(opts: {
 			summarizeSpinner.style.display = "none";
 			summarizeIcon.style.display = "inline-flex";
 			updatePrimaryActionView();
+		}
+	}
+
+	function getActiveTabText(): { label: string; text: string } {
+		if (activeTab === "summary") {
+			return { label: "Summary", text: (data.summary || "").trim() };
+		}
+		if (activeTab === "pretty") {
+			return { label: "Pretty", text: (data.pretty || "").trim() };
+		}
+		const transcriptText = (isDirty ? draftTranscript : data.transcript || "").trim();
+		return { label: "Transcript", text: transcriptText };
+	}
+
+	async function handleCopyActiveTab() {
+		const { label, text } = getActiveTabText();
+		if (!text) {
+			new Notice(`No ${label.toLowerCase()} text to copy.`);
+			return;
+		}
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(text);
+			} else {
+				const area = document.createElement("textarea");
+				area.value = text;
+				area.style.position = "fixed";
+				area.style.opacity = "0";
+				document.body.appendChild(area);
+				area.select();
+				document.execCommand("copy");
+				area.remove();
+			}
+			copySuccess = true;
+			updateActionState();
+			if (copyTimer) window.clearTimeout(copyTimer);
+			copyTimer = window.setTimeout(() => {
+				copySuccess = false;
+				updateActionState();
+			}, 900);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			new Notice(`Copy failed: ${msg}`);
 		}
 	}
 
@@ -611,6 +667,11 @@ export function renderVoiceSummaryBlock(opts: {
 			clearAnimating = false;
 			updateActionState();
 		}, 400);
+	});
+
+	copyButton.addEventListener("click", async () => {
+		if (copyButton.disabled) return;
+		await handleCopyActiveTab();
 	});
 
 	titleDisplay.addEventListener("click", () => {
@@ -875,6 +936,7 @@ export function renderVoiceSummaryBlock(opts: {
 	setIcon(summarizeIcon, "notepad-text");
 	setIcon(summarizeDropdownIcon, "chevron-down");
 	setIcon(clearIcon, "eraser");
+	setIcon(copyIcon, "copy");
 	setIcon(menuIcon, "more-vertical");
 	setIcon(titleCancel, "x");
 	setIcon(titleSave, "check");
@@ -893,5 +955,9 @@ export function renderVoiceSummaryBlock(opts: {
 		unsubscribePreview?.();
 		unsubscribeAudio?.();
 		document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+		if (copyTimer) {
+			window.clearTimeout(copyTimer);
+			copyTimer = null;
+		}
 	};
 }

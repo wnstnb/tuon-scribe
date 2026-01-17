@@ -155,6 +155,8 @@ Voice summary block styles.
 	padding: 4px 6px;
 	min-width: 26px;
 	justify-content: center;
+	align-items: center;
+	line-height: 1;
 }
 
 .tuon-voice-button.mod-cta {
@@ -182,6 +184,48 @@ Voice summary block styles.
 	padding: 0;
 	line-height: 1;
 	transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.tuon-voice-copy-button {
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	padding: 0;
+	line-height: 1;
+	transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.tuon-voice-copy-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.tuon-voice-copy-button.is-success {
+	background: #1f9d55;
+	border-color: #1f9d55;
+	color: white;
+}
+
+.tuon-voice-copy-button__icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	transition: opacity 0.2s ease;
+}
+
+.tuon-voice-copy-button svg {
+	width: 16px;
+	height: 16px;
+	display: block;
 }
 
 .tuon-voice-clear-button.is-confirm {
