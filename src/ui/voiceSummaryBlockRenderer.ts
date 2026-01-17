@@ -18,6 +18,10 @@ import {
 	updateVoiceSummaryBlockInFile,
 	VoiceSummaryBlockData,
 } from "../voiceSummary/voiceSummaryBlock";
+import {
+	buildRecordingStartMarker,
+	buildRecordingStopMarker,
+} from "../transcribe/transcriptMarkers";
 
 type NotesAction = "summary" | "prettify";
 
@@ -31,6 +35,7 @@ export interface VoiceSummaryBlockActions {
 		handler: (data: Uint8Array | null, state: { running: boolean; blockId: string | null }) => void
 	) => () => void;
 	getInteractionSettings: () => { autoScrollTranscript: boolean; autoSwitchToTranscript: boolean };
+	getTimestampSettings: () => { scribeBlockTimestamps: boolean };
 	startRecordingForBlock: (opts: {
 		blockId: string;
 		sourcePath: string;
@@ -622,36 +627,6 @@ export function renderVoiceSummaryBlock(opts: {
 		}
 	}
 
-	function formatTimestamp(date: Date): string {
-		const pad = (value: number) => String(value).padStart(2, "0");
-		return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-			date.getHours()
-		)}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-	}
-
-	function formatDuration(ms: number): string {
-		const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-		const hours = Math.floor(totalSeconds / 3600);
-		const minutes = Math.floor((totalSeconds % 3600) / 60);
-		const seconds = totalSeconds % 60;
-		if (hours > 0) {
-			return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-		}
-		return `${minutes}:${String(seconds).padStart(2, "0")}`;
-	}
-
-	function buildStartMarker(date: Date): string {
-		return `--- Recording started ${formatTimestamp(date)} ---`;
-	}
-
-	function buildStopMarker(date: Date, startedAt: Date | null): string {
-		if (!startedAt) {
-			return `--- Recording stopped ${formatTimestamp(date)} ---`;
-		}
-		const duration = formatDuration(date.getTime() - startedAt.getTime());
-		return `--- Recording stopped ${formatTimestamp(date)} (duration ${duration}) ---`;
-	}
-
 	clearButton.addEventListener("click", async () => {
 		if (clearButton.disabled) return;
 		if (!clearConfirm) {
@@ -755,7 +730,9 @@ export function renderVoiceSummaryBlock(opts: {
 		}
 		recordingStartedAt = new Date();
 		recordingWasActive = true;
-		await appendTranscriptMarker(buildStartMarker(recordingStartedAt));
+		if (opts.actions.getTimestampSettings().scribeBlockTimestamps) {
+			await appendTranscriptMarker(buildRecordingStartMarker(recordingStartedAt));
+		}
 	});
 
 	transcriptTab.addEventListener("click", () => {
@@ -906,7 +883,9 @@ export function renderVoiceSummaryBlock(opts: {
 		}
 		if (!recording && recordingWasActive) {
 			const stoppedAt = new Date();
-			void appendTranscriptMarker(buildStopMarker(stoppedAt, recordingStartedAt));
+			if (opts.actions.getTimestampSettings().scribeBlockTimestamps) {
+				void appendTranscriptMarker(buildRecordingStopMarker(stoppedAt, recordingStartedAt));
+			}
 			recordingStartedAt = null;
 			recordingWasActive = false;
 		}

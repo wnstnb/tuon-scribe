@@ -6,12 +6,17 @@ import {
 	Modal,
 	Notice,
 	Plugin,
+	TFile,
 	setIcon,
 } from "obsidian";
 import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
 import { openRouterChatCompletion } from "./ai/openrouter";
 import { buildSystemPrompt, buildUserPrompt, NotesAction } from "./ai/voiceSummaryPrompts";
 import { LiveTranscribeService } from "./transcribe/liveTranscribeService";
+import {
+	buildRecordingStartMarker,
+	buildRecordingStopMarker,
+} from "./transcribe/transcriptMarkers";
 import { AudioVisualizer } from "./ui/audioVisualizer";
 import { showSelectionOverlay } from "./ui/selectionOverlay";
 import { EditorView } from "@codemirror/view";
@@ -42,6 +47,7 @@ export default class MyPlugin extends Plugin {
 	private widgetTimerEl: HTMLSpanElement | null = null;
 	private widgetTimerIntervalId: number | null = null;
 	private widgetTimerStart: number | null = null;
+	private editorRecordingStartedAt: Date | null = null;
 	private widgetRunning = false;
 	private widgetLastVisualizerDraw = 0;
 	private widgetRibbonEl: HTMLElement | null = null;
@@ -79,8 +85,16 @@ export default class MyPlugin extends Plugin {
 			}),
 			onStatusText: (t) => this.updateStatusText(t),
 			onRunningChange: (running) => {
+				const wasBlockRecording = Boolean(this.recordingBlockId);
 				this.updateWidgetState(running);
-				if (!running) {
+				if (running) {
+					if (!wasBlockRecording) {
+						this.handleEditorRecordingStart();
+					}
+				} else {
+					if (!wasBlockRecording) {
+						this.handleEditorRecordingStop();
+					}
 					this.recordingBlockId = null;
 				}
 				this.notifyRecordingChange();
@@ -97,6 +111,13 @@ export default class MyPlugin extends Plugin {
 		if (this.settings.showWidget) {
 			this.initLiveWidget();
 		}
+		this.registerEvent(
+			this.app.workspace.on("file-open", (file) => {
+				window.setTimeout(() => {
+					this.refreshActiveMarkdownViewIfScribeBlock(file);
+				}, 0);
+			})
+		);
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => {
 				this.attachWidgetToActiveEditor();
@@ -210,6 +231,9 @@ export default class MyPlugin extends Plugin {
 							autoScrollTranscript: this.settings.autoScrollTranscript,
 							autoSwitchToTranscript: this.settings.autoSwitchToTranscript,
 						}),
+						getTimestampSettings: () => ({
+							scribeBlockTimestamps: this.settings.scribeBlockTimestamps,
+						}),
 						startRecordingForBlock: (opts) => this.startRecordingForBlock(opts),
 						stopRecording: () => this.stopRecording(),
 						summarizeTranscript: (transcript) =>
@@ -255,6 +279,55 @@ export default class MyPlugin extends Plugin {
 			this.widgetTranscriptEl.textContent = preview || "Say something to begin…";
 			this.scrollWidgetTranscriptToBottom();
 		}
+	}
+
+	private refreshActiveMarkdownViewIfScribeBlock(file: TFile | null) {
+		if (!file) return;
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view) return;
+		const cache = this.app.metadataCache.getFileCache(file) as
+			| { sections?: Array<{ type?: string; id?: string }> }
+			| null
+			| undefined;
+		const hasScribeBlock =
+			cache?.sections?.some(
+				(section) => section.type === "code" && section.id === VOICE_SUMMARY_BLOCK_TYPE
+			) ?? false;
+		if (!hasScribeBlock) return;
+		const preview = (view as { previewMode?: { rerender?: (force?: boolean) => void } })
+			.previewMode;
+		preview?.rerender?.(true);
+	}
+
+	private getActiveEditor(): Editor | null {
+		return this.app.workspace.getActiveViewOfType(MarkdownView)?.editor ?? null;
+	}
+
+	private insertEditorMarker(marker: string) {
+		const editor = this.getActiveEditor();
+		if (!editor) return;
+		const cursor = editor.getCursor();
+		const prefix = cursor.ch === 0 ? "" : "\n\n";
+		const insertion = `${prefix}${marker}\n\n`;
+		editor.replaceRange(insertion, cursor);
+		editor.setCursor(advanceCursor(cursor, insertion));
+	}
+
+	private handleEditorRecordingStart() {
+		if (this.editorRecordingStartedAt) return;
+		const startedAt = new Date();
+		this.editorRecordingStartedAt = startedAt;
+		if (!this.settings.editorTranscriptionTimestamps) return;
+		this.insertEditorMarker(buildRecordingStartMarker(startedAt));
+	}
+
+	private handleEditorRecordingStop() {
+		if (!this.editorRecordingStartedAt) return;
+		const stoppedAt = new Date();
+		const startedAt = this.editorRecordingStartedAt;
+		this.editorRecordingStartedAt = null;
+		if (!this.settings.editorTranscriptionTimestamps) return;
+		this.insertEditorMarker(buildRecordingStopMarker(stoppedAt, startedAt));
 	}
 
 	private getEditorView(editor: Editor): EditorView | null {
@@ -854,6 +927,19 @@ class SampleModal extends Modal {
 		const {contentEl} = this;
 		contentEl.empty();
 	}
+}
+
+function advanceCursor(
+	cursor: { line: number; ch: number },
+	text: string
+): { line: number; ch: number } {
+	const lines = text.split("\n");
+	if (lines.length === 1) {
+		const first = lines[0] ?? "";
+		return { line: cursor.line, ch: cursor.ch + first.length };
+	}
+	const last = lines[lines.length - 1] ?? "";
+	return { line: cursor.line + lines.length - 1, ch: last.length };
 }
 
 function formatTimer(ms: number): string {

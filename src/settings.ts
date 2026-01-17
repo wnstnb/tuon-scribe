@@ -19,6 +19,10 @@ export interface MyPluginSettings {
 	autoScrollTranscript: boolean;
 	/** Auto-switch to transcript tab while recording. */
 	autoSwitchToTranscript: boolean;
+	/** Add start/stop timestamps in scribe blocks. */
+	scribeBlockTimestamps: boolean;
+	/** Add start/stop timestamps in editor live transcription. */
+	editorTranscriptionTimestamps: boolean;
 	/** AssemblyAI sample rate for streaming (Hz). */
 	assemblyAiSampleRate: number;
 	/** PCM16 chunk size in samples. */
@@ -48,6 +52,8 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	showWidget: false,
 	autoScrollTranscript: true,
 	autoSwitchToTranscript: true,
+	scribeBlockTimestamps: true,
+	editorTranscriptionTimestamps: false,
 	assemblyAiSampleRate: 16000,
 	assemblyAiChunkSizeSamples: 800,
 	assemblyAiEncoding: "pcm_s16le",
@@ -209,6 +215,32 @@ export class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.autoSwitchToTranscript)
 					.onChange(async (value) => {
 						this.plugin.settings.autoSwitchToTranscript = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		containerEl.createEl("h4", { text: "Transcription timestamps" });
+
+		new Setting(containerEl)
+			.setName("Add timestamps in scribe blocks")
+			.setDesc("Adds recording start/stop markers to scribe block transcripts.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.scribeBlockTimestamps)
+					.onChange(async (value) => {
+						this.plugin.settings.scribeBlockTimestamps = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Add timestamps in editor transcription")
+			.setDesc("Adds recording start/stop markers when inserting live transcription into the editor.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.editorTranscriptionTimestamps)
+					.onChange(async (value) => {
+						this.plugin.settings.editorTranscriptionTimestamps = value;
 						await this.plugin.saveSettings();
 					})
 			);
