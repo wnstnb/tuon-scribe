@@ -17,6 +17,7 @@ export interface LiveTranscribeServiceOptions {
 		minEndOfTurnSilenceMs: number;
 		maxTurnSilenceMs: number;
 	};
+	getKeytermsPrompt?: () => Promise<string[]>;
 	onStatusText?: (text: string) => void;
 	onRunningChange?: (running: boolean) => void;
 	onAudioFrame?: (data: Uint8Array) => void;
@@ -26,6 +27,7 @@ export class LiveTranscribeService {
 	private readonly app: App;
 	private readonly getAssemblyAiApiKey: () => string;
 	private readonly getAssemblyAiConfig: LiveTranscribeServiceOptions["getAssemblyAiConfig"];
+	private readonly getKeytermsPrompt?: LiveTranscribeServiceOptions["getKeytermsPrompt"];
 	private readonly onStatusText?: (text: string) => void;
 	private readonly onRunningChange?: (running: boolean) => void;
 	private readonly onAudioFrame?: (data: Uint8Array) => void;
@@ -46,6 +48,7 @@ export class LiveTranscribeService {
 		this.app = opts.app;
 		this.getAssemblyAiApiKey = opts.getAssemblyAiApiKey;
 		this.getAssemblyAiConfig = opts.getAssemblyAiConfig;
+		this.getKeytermsPrompt = opts.getKeytermsPrompt;
 		this.onStatusText = opts.onStatusText;
 		this.onRunningChange = opts.onRunningChange;
 		this.onAudioFrame = opts.onAudioFrame;
@@ -76,6 +79,12 @@ export class LiveTranscribeService {
 			Number.isFinite(config.chunkSizeSamples) && config.chunkSizeSamples > 0
 				? config.chunkSizeSamples
 				: 800;
+		let keytermsPrompt: string[] | undefined;
+		try {
+			keytermsPrompt = await this.getKeytermsPrompt?.();
+		} catch {
+			keytermsPrompt = undefined;
+		}
 
 		this.insertFinalHandler =
 			target?.onFinalText ?? ((text) => this.insertFinalAtCursor(text));
@@ -95,6 +104,7 @@ export class LiveTranscribeService {
 			endOfTurnConfidenceThreshold: config.endOfTurnConfidenceThreshold,
 			minEndOfTurnSilenceMs: config.minEndOfTurnSilenceMs,
 			maxTurnSilenceMs: config.maxTurnSilenceMs,
+			keytermsPrompt,
 		});
 		this.unsubAai = this.aai.onEvent((ev) => this.handleAaiEvent(ev));
 

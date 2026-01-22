@@ -10,6 +10,7 @@ export interface AssemblyAiFileTranscriptionOptions {
 	speakerLabels?: boolean;
 	punctuate?: boolean;
 	formatText?: boolean;
+	keytermsPrompt?: string[];
 	pollIntervalMs?: number;
 	maxPollMs?: number;
 	onProgress?: (status: string) => void;
@@ -66,6 +67,9 @@ async function requestTranscript(
 		punctuate: opts.punctuate ?? true,
 		format_text: opts.formatText ?? true,
 	};
+	if (opts.keytermsPrompt && opts.keytermsPrompt.length > 0) {
+		(payload as { keyterms_prompt?: string[] }).keyterms_prompt = opts.keytermsPrompt;
+	}
 	const res = await requestUrl({
 		url: `${BASE_URL}/v2/transcript`,
 		method: "POST",

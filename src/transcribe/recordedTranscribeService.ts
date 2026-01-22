@@ -19,13 +19,20 @@ export interface RecordedTranscribeServiceOptions {
 	app: App;
 	getAssemblyAiApiKey: () => string;
 	getFileTranscribeConfig?: () => AssemblyAiFileConfig;
+	getKeytermsPrompt?: () => Promise<string[]>;
 	onStatusText?: (text: string) => void;
 	onAudioFrame?: (data: Uint8Array | null) => void;
 }
 
 export type AssemblyAiFileConfig = Pick<
 	AssemblyAiFileTranscriptionOptions,
-	"speechModels" | "speakerLabels" | "punctuate" | "formatText" | "pollIntervalMs" | "maxPollMs"
+	| "speechModels"
+	| "speakerLabels"
+	| "punctuate"
+	| "formatText"
+	| "keytermsPrompt"
+	| "pollIntervalMs"
+	| "maxPollMs"
 >;
 
 export interface RecordedTranscriptionResult {
@@ -41,6 +48,7 @@ export class RecordedTranscribeService {
 	private readonly app: App;
 	private readonly getAssemblyAiApiKey: () => string;
 	private readonly getFileTranscribeConfig?: RecordedTranscribeServiceOptions["getFileTranscribeConfig"];
+	private readonly getKeytermsPrompt?: RecordedTranscribeServiceOptions["getKeytermsPrompt"];
 	private readonly onStatusText?: (text: string) => void;
 	private readonly onAudioFrame?: (data: Uint8Array | null) => void;
 
@@ -52,6 +60,7 @@ export class RecordedTranscribeService {
 		this.app = opts.app;
 		this.getAssemblyAiApiKey = opts.getAssemblyAiApiKey;
 		this.getFileTranscribeConfig = opts.getFileTranscribeConfig;
+		this.getKeytermsPrompt = opts.getKeytermsPrompt;
 		this.onStatusText = opts.onStatusText;
 		this.onAudioFrame = opts.onAudioFrame;
 	}
@@ -179,10 +188,21 @@ export class RecordedTranscribeService {
 		audioData: ArrayBuffer,
 		config: AssemblyAiFileConfig
 	): Promise<AssemblyAiFileTranscriptionResult> {
+		let keytermsPrompt: string[] | undefined;
+		try {
+			keytermsPrompt = await this.getKeytermsPrompt?.();
+		} catch {
+			keytermsPrompt = undefined;
+		}
+		const keytermsPayload =
+			keytermsPrompt && keytermsPrompt.length > 0
+				? { keytermsPrompt }
+				: {};
 		return transcribeAudioFileWithAssemblyAi({
 			apiKey,
 			audioData,
 			...config,
+			...keytermsPayload,
 			onProgress: (status) => {
 				const cleaned = status ? status.replace(/_/g, " ") : "processing";
 				this.onStatusText?.(`Transcribing (${cleaned})…`);

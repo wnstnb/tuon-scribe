@@ -21,6 +21,7 @@ export interface AssemblyAiRealtimeClientOptions {
 	endOfTurnConfidenceThreshold?: number;
 	minEndOfTurnSilenceMs?: number;
 	maxTurnSilenceMs?: number;
+	keytermsPrompt?: string[];
 }
 
 export class AssemblyAiRealtimeClient {
@@ -32,6 +33,7 @@ export class AssemblyAiRealtimeClient {
 	private readonly endOfTurnConfidenceThreshold?: number;
 	private readonly minEndOfTurnSilenceMs?: number;
 	private readonly maxTurnSilenceMs?: number;
+	private readonly keytermsPrompt?: string[];
 
 	private onEventHandlers = new Set<(ev: AssemblyAiTranscriptEvent) => void>();
 
@@ -43,6 +45,7 @@ export class AssemblyAiRealtimeClient {
 		this.endOfTurnConfidenceThreshold = opts.endOfTurnConfidenceThreshold;
 		this.minEndOfTurnSilenceMs = opts.minEndOfTurnSilenceMs;
 		this.maxTurnSilenceMs = opts.maxTurnSilenceMs;
+		this.keytermsPrompt = opts.keytermsPrompt;
 	}
 
 	onEvent(handler: (ev: AssemblyAiTranscriptEvent) => void): () => void {
@@ -94,6 +97,9 @@ export class AssemblyAiRealtimeClient {
 		}
 		if (Number.isFinite(this.maxTurnSilenceMs)) {
 			url.searchParams.set("max_turn_silence", String(this.maxTurnSilenceMs));
+		}
+		if (this.keytermsPrompt && this.keytermsPrompt.length > 0) {
+			url.searchParams.set("keyterms_prompt", JSON.stringify(this.keytermsPrompt));
 		}
 
 		this.ws = new WebSocket(url.toString());

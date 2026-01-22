@@ -35,6 +35,12 @@ import {
 } from "./diagnostics/apiKeyDiagnostics";
 import { AudioFilePickerModal } from "./ui/audioFilePickerModal";
 import { isAudioFile } from "./audio/audioFileUtils";
+import {
+	appendVocabTerm,
+	ensureVocabFile as ensureVocabFileOnDisk,
+	readVocabTerms,
+	vocabPaths,
+} from "./vocab/vocabFile";
 
 const OPENROUTER_APP_TITLE = "Tuon Scribe";
 
@@ -82,6 +88,7 @@ export default class TuonScribePlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		void this.initializeVocabFile();
 		this.widgetRecordingMode = "stream";
 
 		this.statusBarItemEl = this.addStatusBarItem();
@@ -99,6 +106,7 @@ export default class TuonScribePlugin extends Plugin {
 				minEndOfTurnSilenceMs: this.settings.assemblyAiMinEndOfTurnSilenceMs,
 				maxTurnSilenceMs: this.settings.assemblyAiMaxTurnSilenceMs,
 			}),
+			getKeytermsPrompt: () => this.loadKeytermsPrompt(),
 			onStatusText: (t) => this.updateStatusText(t),
 			onRunningChange: (running) => {
 				const wasBlockRecording = Boolean(this.streamRecordingBlockId);
@@ -133,6 +141,7 @@ export default class TuonScribePlugin extends Plugin {
 				punctuate: true,
 				formatText: true,
 			}),
+			getKeytermsPrompt: () => this.loadKeytermsPrompt(),
 			onStatusText: (text) => this.updateRecordedStatusText(text),
 			onAudioFrame: (data) => {
 				this.updateVisualizer(data);
@@ -185,6 +194,13 @@ export default class TuonScribePlugin extends Plugin {
 						.setIcon("wand-2")
 						.onClick(() => {
 							void this.runNotesAction(editor, "prettify");
+						});
+				});
+				menu.addItem((item) => {
+					item.setTitle("Add to vocab")
+						.setIcon("book-plus")
+						.onClick(() => {
+							void this.addSelectionToVocab(selection);
 						});
 				});
 			})
@@ -240,7 +256,7 @@ export default class TuonScribePlugin extends Plugin {
 
 		this.addCommand({
 			id: "tuon-summarize-selection",
-			name: "Tuon: Summarize selection (OpenRouter)",
+			name: "Summarize selection",
 			icon: "sparkles",
 			editorCallback: async (editor: Editor) => {
 				await this.runNotesAction(editor, "summary");
@@ -249,7 +265,7 @@ export default class TuonScribePlugin extends Plugin {
 
 		this.addCommand({
 			id: "tuon-prettify-selection",
-			name: "Tuon: Prettify selection (OpenRouter)",
+			name: "Prettify selection",
 			icon: "wand-2",
 			editorCallback: async (editor: Editor) => {
 				await this.runNotesAction(editor, "prettify");
@@ -257,8 +273,22 @@ export default class TuonScribePlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "tuon-add-to-vocab",
+			name: "Add selection to vocab",
+			icon: "book-open-check",
+			editorCallback: async (editor: Editor) => {
+				const selection = editor.getSelection()?.trim();
+				if (!selection) {
+					new Notice("Select some text first.");
+					return;
+				}
+				await this.addSelectionToVocab(selection);
+			},
+		});
+
+		this.addCommand({
 			id: "tuon-insert-voice-summary-block",
-			name: "Tuon: Insert scribe block",
+			name: "Insert scribe block",
 			editorCallback: (editor: Editor) => {
 				this.insertVoiceSummaryBlock(editor);
 			},
@@ -266,13 +296,13 @@ export default class TuonScribePlugin extends Plugin {
 
 		this.addCommand({
 			id: "tuon-test-assemblyai-key",
-			name: "Tuon: Test AssemblyAI API key",
+			name: "Test AssemblyAI API key",
 			callback: () => void this.testAssemblyAiKey(),
 		});
 
 		this.addCommand({
 			id: "tuon-test-openrouter-key",
-			name: "Tuon: Test OpenRouter API key",
+			name: "Test OpenRouter API key",
 			callback: () => void this.testOpenRouterKey(),
 		});
 
@@ -340,6 +370,47 @@ export default class TuonScribePlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private async initializeVocabFile() {
+		try {
+			await ensureVocabFileOnDisk(this.app);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			new Notice(`Unable to create vocab file: ${msg}`);
+		}
+	}
+
+	private async loadKeytermsPrompt(): Promise<string[]> {
+		try {
+			return await readVocabTerms(this.app);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			new Notice(`Unable to read vocab file: ${msg}`);
+			return [];
+		}
+	}
+
+	private async addSelectionToVocab(selection: string) {
+		try {
+			const result = await appendVocabTerm(this.app, selection);
+			if (result.status === "added") {
+				new Notice(`Added to vocab: ${result.term ?? "term"}`);
+				return;
+			}
+			if (result.status === "exists") {
+				new Notice(`Already in vocab: ${result.term ?? "term"}`);
+				return;
+			}
+			if (result.status === "too-long") {
+				new Notice("Vocabulary terms must be 50 characters or fewer.");
+				return;
+			}
+			new Notice("Nothing to add to vocab.");
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			new Notice(`Failed to update ${vocabPaths.file}: ${msg}`);
+		}
 	}
 
 	private updateStatusText(text: string) {
